@@ -1,12 +1,7 @@
 import json
-
 import gradio as gr
 from helper import get_together_api_key, load_env, get_game_state, start_game, is_safe
 from together import Together
-
-import os
-
-REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
 # Inventory Detector system prompt
 system_prompt = """You are an AI Game Assistant. \
@@ -101,9 +96,9 @@ Inventory: {json.dumps(game_state['inventory'])}"""
         {"role": "user", "content": world_info}
     ]
 
-    for action in history:
-        messages.append({"role": "assistant", "content": action[0]})
-        messages.append({"role": "user", "content": action[1]})
+    for user_input, model_output in history:  # Loop through history properly
+        messages.append({"role": "user", "content": user_input})
+        messages.append({"role": "assistant", "content": model_output})
 
     messages.append({"role": "user", "content": message})
     model_output = client.chat.completions.create(
@@ -113,13 +108,7 @@ Inventory: {json.dumps(game_state['inventory'])}"""
     result = model_output.choices[0].message.content
     return result
 
-def generate_avatar(description):
-    output = replicate_client.run(
-        "stability-ai/stable-diffusion",
-        input={"prompt": description}
-    )
-    return output[0]  # First image URL
-
+# Global game state (preserved across interactions)
 game_state = get_game_state(inventory={
     "cloth pants": 1,
     "cloth shirt": 1,
@@ -127,32 +116,26 @@ game_state = get_game_state(inventory={
     "leather bound journal": 1,
     "gold": 5
 })
+history = []
 
-def main_loop(message, history):
-    output = run_action(message, history, game_state)
+# Gradio-compatible format for chat history
+def gradio_main(user_input, chat_history):
+    output = run_action(user_input, history, game_state)
     if not is_safe(output):
-        return 'Invalid Output'
+        chat_history.append({"role": "user", "content": user_input})
+        chat_history.append({"role": "assistant", "content": "Invalid output. Please try a different action."})
+        return chat_history
 
     item_updates = detect_inventory_changes(game_state, output)
     update_msg = update_inventory(game_state['inventory'], item_updates)
-    output += update_msg
-    return output
+    full_output = output + update_msg
 
-def game_with_avatar(character_description, message, history):
-    avatar_url = generate_avatar(character_description)
-    response = main_loop(message, history)
-    return avatar_url, response
+    # Append to history with correct order: user_input first, then model output
+    history.append((user_input, output))  # Correct order: user_input, model_output
 
-gr.Interface(
-    fn=game_with_avatar,
-    inputs=[
-        gr.Textbox(label="Describe your character"),
-        gr.Textbox(label="Your action"),
-        gr.State(label="Game History")
-    ],
-    outputs=[
-        gr.Image(label="Your Avatar"),
-        gr.Textbox(label="Game Output")
-    ],
-    title="🧙 Fantasy RPG with Avatar Generator"
-).launch(share=True)
+    chat_history.append({"role": "user", "content": user_input})
+    chat_history.append({"role": "assistant", "content": full_output})
+    return chat_history
+
+# Launch the chat
+gr.ChatInterface(gradio_main, title="🧙 Fantasy AI Game", type="messages").launch()
