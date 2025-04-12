@@ -1,4 +1,4 @@
-# AI-Powered Fantasy RPG Game with Avatar Generation
+# AI-Powered Fantasy RPG Game
 
 This project is an AI-powered text-based RPG game that uses large language models to generate interactive storytelling experiences. It features dynamic inventory tracking, avatar generation via Stable Diffusion, and a Gradio-based UI for seamless user interaction.
 
